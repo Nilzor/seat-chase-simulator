@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -98,4 +99,53 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce 2s infinite;
+}
+
+.avatar-player {
+  @apply bg-blue-500 rounded-full border-2 border-white shadow-md z-20;
+}
+
+.avatar-npc {
+  @apply rounded-full shadow-sm z-10;
+}
+
+.chair {
+  @apply bg-amber-800 rounded-md w-8 h-8 border border-amber-900;
+}
+
+.grid-cell {
+  @apply flex items-center justify-center;
+}
+
+.hallway {
+  @apply bg-neutral-200;
+}
+
+.aisle {
+  @apply bg-neutral-100;
+}
+
+.carpet {
+  @apply bg-red-100;
+}
+
+.wall {
+  @apply bg-stone-400;
+}
+
+.podium {
+  @apply bg-stone-700;
 }
