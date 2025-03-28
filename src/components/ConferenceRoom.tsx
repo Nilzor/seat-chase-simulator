@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from "sonner";
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
@@ -16,7 +15,7 @@ type AttendeeType = {
   targetSeat?: Position;
   nextMove?: number; // Timestamp for next move
 };
-type CellType = 'empty' | 'chair' | 'wall' | 'hallway' | 'aisle' | 'carpet' | 'podium';
+type CellType = 'empty' | 'chair' | 'wall' | 'hallway' | 'aisle' | 'carpet' | 'podium' | 'row-aisle';
 type GridCell = {
   type: CellType;
   occupiedBy?: number; // ID of attendee occupying the cell
@@ -24,7 +23,7 @@ type GridCell = {
   chairId?: number;
 };
 
-const GRID_ROWS = 15;
+const GRID_ROWS = 20; // Increased to accommodate row aisles
 const GRID_COLS = 30;
 const TOTAL_ATTENDEES = 48;
 const PLAYER_ID = 0;
@@ -93,40 +92,58 @@ const ConferenceRoom: React.FC = () => {
       }
     }
 
-    // Create seats on both sides
+    // Create row aisles between chair rows
+    const createRowAisle = (rowStart: number) => {
+      for (let col = 1; col < GRID_COLS - 1; col++) {
+        if (col !== aisleCol - 1 && col !== aisleCol && col !== aisleCol + 1) { // Skip center aisle cells
+          newGrid[rowStart][col].type = 'row-aisle';
+        }
+      }
+    };
+
+    // First chair row starts at row 7
+    const firstChairRow = 7;
+    const chairRowSpacing = 3; // Each chair row + aisle
+
+    // Create seats on both sides with row aisles between them
     const chairPositions: Position[] = [];
     const leftSide = aisleCol - 2;
     const rightSide = aisleCol + 2;
     
-    // Left side chairs
-    for (let row = 6; row < 6 + CHAIR_ROWS; row++) {
-      for (let col = 2; col < leftSide; col += 3) {
-        for (let i = 0; i < CHAIRS_PER_ROW / 2; i++) {
-          const chairCol = col + i;
-          if (chairCol < leftSide) {
-            newGrid[row][chairCol].type = 'chair';
-            newGrid[row][chairCol].isChair = true;
-            newGrid[row][chairCol].chairId = chairPositions.length;
-            chairPositions.push({ x: chairCol, y: row });
-          }
+    // Create chair rows and aisles between rows
+    for (let rowIdx = 0; rowIdx < CHAIR_ROWS; rowIdx++) {
+      const chairRowY = firstChairRow + (rowIdx * chairRowSpacing);
+      
+      // Create row aisles before each chair row (except the first one)
+      if (rowIdx > 0) {
+        createRowAisle(chairRowY - 1);
+      }
+      
+      // Left side chairs for this row
+      for (let i = 0; i < CHAIRS_PER_ROW / 2; i++) {
+        const chairCol = 2 + (i * 2); // Space chairs out
+        if (chairCol < leftSide) {
+          newGrid[chairRowY][chairCol].type = 'chair';
+          newGrid[chairRowY][chairCol].isChair = true;
+          newGrid[chairRowY][chairCol].chairId = chairPositions.length;
+          chairPositions.push({ x: chairCol, y: chairRowY });
+        }
+      }
+      
+      // Right side chairs for this row
+      for (let i = 0; i < CHAIRS_PER_ROW / 2; i++) {
+        const chairCol = rightSide + (i * 2); // Space chairs out
+        if (chairCol < GRID_COLS - 1) {
+          newGrid[chairRowY][chairCol].type = 'chair';
+          newGrid[chairRowY][chairCol].isChair = true;
+          newGrid[chairRowY][chairCol].chairId = chairPositions.length;
+          chairPositions.push({ x: chairCol, y: chairRowY });
         }
       }
     }
-    
-    // Right side chairs
-    for (let row = 6; row < 6 + CHAIR_ROWS; row++) {
-      for (let col = rightSide; col < GRID_COLS - 2; col += 3) {
-        for (let i = 0; i < CHAIRS_PER_ROW / 2; i++) {
-          const chairCol = col + i;
-          if (chairCol < GRID_COLS - 1) {
-            newGrid[row][chairCol].type = 'chair';
-            newGrid[row][chairCol].isChair = true;
-            newGrid[row][chairCol].chairId = chairPositions.length;
-            chairPositions.push({ x: chairCol, y: row });
-          }
-        }
-      }
-    }
+
+    // Create row aisle after the last chair row
+    createRowAisle(firstChairRow + (CHAIR_ROWS * chairRowSpacing) - 1);
 
     // Initialize attendees in a two-abreast line in the hallway
     const hallwayStartX = 2;
@@ -452,9 +469,12 @@ const ConferenceRoom: React.FC = () => {
                     ${cell.occupiedBy === PLAYER_ID ? 'avatar-player' : 'avatar-npc'} 
                     ${attendees.find(a => a.id === cell.occupiedBy)?.color || 'bg-gray-500'}
                     ${attendees.find(a => a.id === cell.occupiedBy)?.isSeated ? 'animate-bounce-slow' : ''}
+                    flex items-center justify-center text-xs font-bold
                   `}
                   style={{ width: CELL_SIZE * 0.7, height: CELL_SIZE * 0.7 }}
-                ></div>
+                >
+                  {cell.occupiedBy}
+                </div>
               )}
               {cell.type === 'chair' && cell.occupiedBy === undefined && (
                 <div className="chair"></div>
@@ -494,7 +514,7 @@ const ConferenceRoom: React.FC = () => {
         <div className="flex justify-center space-x-4 mb-4">
           <div className="flex items-center">
             <div className="w-4 h-4 rounded-full bg-green-500 mr-2"></div>
-            <span>You</span>
+            <span>You (#0)</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 rounded-full bg-yellow-400 mr-2"></div>
@@ -590,10 +610,11 @@ const ConferenceRoom: React.FC = () => {
       <div className="bg-white rounded-lg p-4 shadow-md w-full max-w-md">
         <h2 className="text-xl font-bold mb-2">How to Play:</h2>
         <ul className="list-disc pl-5 space-y-1">
-          <li>Use arrow keys or buttons to move your character (green circle)</li>
+          <li>Use arrow keys or buttons to move your character (green circle with #0)</li>
           <li>Everyone moves one step per second - you can move anytime</li>
           <li>Navigate through the crowd to find an empty chair</li>
-          <li>Once seated, wait for everyone else to find seats</li>
+          <li>Once seated, you can't stand up again</li>
+          <li>All attendees have numbers to identify them</li>
           <li>The game ends when all 48 attendees are seated</li>
         </ul>
       </div>
