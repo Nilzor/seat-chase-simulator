@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from "sonner";
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { Button } from '../components/ui/button';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 
 // Define types
 type Position = { x: number; y: number };
@@ -13,6 +14,7 @@ type AttendeeType = {
   color: string;
   isSeated: boolean;
   targetSeat?: Position;
+  nextMove?: number; // Timestamp for next move
 };
 type CellType = 'empty' | 'chair' | 'wall' | 'hallway' | 'aisle' | 'carpet' | 'podium';
 type GridCell = {
@@ -29,14 +31,7 @@ const PLAYER_ID = 0;
 const CHAIR_ROWS = 3;
 const CHAIRS_PER_ROW = 8;
 const CELL_SIZE = 32; // pixels
-
-const generateRandomColor = () => {
-  const colors = [
-    'bg-red-400', 'bg-green-400', 'bg-yellow-400', 'bg-purple-400', 
-    'bg-pink-400', 'bg-indigo-400', 'bg-teal-400', 'bg-orange-400'
-  ];
-  return colors[Math.floor(Math.random() * colors.length)];
-};
+const MOVE_INTERVAL = 1000; // 1 second in milliseconds
 
 const ConferenceRoom: React.FC = () => {
   const [grid, setGrid] = useState<GridCell[][]>([]);
@@ -45,8 +40,11 @@ const ConferenceRoom: React.FC = () => {
   const [gameOver, setGameOver] = useState(false);
   const [playerSeated, setPlayerSeated] = useState(false);
   const [movesCount, setMovesCount] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [lastTick, setLastTick] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>();
+  const timerRef = useRef<number>();
   
   // Initialize the grid and attendees
   const initializeGame = useCallback(() => {
@@ -130,34 +128,49 @@ const ConferenceRoom: React.FC = () => {
       }
     }
 
-    // Initialize attendees
-    const startX = 5;
-    const startY = 2;
+    // Initialize attendees in a two-abreast line in the hallway
+    const hallwayStartX = 2;
+    const hallwayStartY = 2;
     const newAttendees: AttendeeType[] = [];
     
-    // Player
-    newAttendees.push({
-      id: PLAYER_ID,
-      position: { x: startX, y: startY },
-      color: 'bg-blue-500',
-      isSeated: false
-    });
-    
-    // Other attendees
-    for (let i = 1; i < TOTAL_ATTENDEES; i++) {
-      const randX = Math.floor(Math.random() * (GRID_COLS - 4)) + 2;
-      const randY = Math.floor(Math.random() * 2) + 2;
-      
-      const attendee: AttendeeType = {
-        id: i,
-        position: { x: randX, y: randY },
-        color: generateRandomColor(),
-        isSeated: false,
-        targetSeat: { ...chairPositions[i % chairPositions.length] }
+    // Position calculation for two-abreast line
+    const getAttendeePosition = (index: number): Position => {
+      const row = Math.floor(index / 2);
+      const col = index % 2 === 0 ? 0 : 1;
+      return { 
+        x: hallwayStartX + col, 
+        y: hallwayStartY + row
       };
-      
-      newAttendees.push(attendee);
+    };
+
+    // Create all non-player attendees
+    for (let i = 0; i < TOTAL_ATTENDEES; i++) {
+      if (i !== PLAYER_ID) {
+        const position = getAttendeePosition(i);
+        const attendee: AttendeeType = {
+          id: i,
+          position,
+          color: 'bg-yellow-400', // All other attendees are yellow
+          isSeated: false,
+          targetSeat: { ...chairPositions[i % chairPositions.length] },
+          nextMove: Date.now() + MOVE_INTERVAL
+        };
+        newAttendees.push(attendee);
+      }
     }
+    
+    // Position player in the middle of the group
+    const playerIndex = Math.floor(TOTAL_ATTENDEES / 2);
+    const playerPosition = getAttendeePosition(playerIndex);
+    
+    // Create player
+    newAttendees.splice(PLAYER_ID, 0, {
+      id: PLAYER_ID,
+      position: playerPosition,
+      color: 'bg-green-500', // Player is green
+      isSeated: false,
+      nextMove: Date.now() + MOVE_INTERVAL
+    });
     
     // Update occupation
     for (const attendee of newAttendees) {
@@ -173,115 +186,137 @@ const ConferenceRoom: React.FC = () => {
     setGameOver(false);
     setPlayerSeated(false);
     setMovesCount(0);
+    setElapsedTime(0);
+    setLastTick(Date.now());
   }, []);
 
+  // Main game loop
   useEffect(() => {
-    if (gameStarted) {
-      const moveNPCs = () => {
+    if (gameStarted && !gameOver) {
+      const updateClock = () => {
+        const now = Date.now();
+        const delta = now - lastTick;
+        
+        if (delta >= 1000) { // Update every second
+          setElapsedTime(prev => prev + 1);
+          setLastTick(now);
+        }
+        
+        // Check for NPC movement
         setAttendees(prevAttendees => {
-          const newAttendees = [...prevAttendees];
-          
-          for (let i = 1; i < newAttendees.length; i++) {
-            const attendee = newAttendees[i];
-            
-            if (attendee.isSeated) continue;
-            
-            if (attendee.targetSeat) {
-              // Determine if the attendee is at their target
-              const atTarget = 
-                attendee.position.x === attendee.targetSeat.x && 
-                attendee.position.y === attendee.targetSeat.y;
-              
-              if (atTarget) {
-                attendee.isSeated = true;
-                continue;
-              }
-              
-              // Try to move towards target seat
-              const dx = Math.sign(attendee.targetSeat.x - attendee.position.x);
-              const dy = Math.sign(attendee.targetSeat.y - attendee.position.y);
-              
-              // First try to move horizontally
-              if (dx !== 0) {
-                const newX = attendee.position.x + dx;
-                const canMove = isValidMove(attendee.id, { x: newX, y: attendee.position.y });
-                
-                if (canMove) {
-                  attendee.position.x = newX;
-                  continue;
-                }
-              }
-              
-              // Then try to move vertically
-              if (dy !== 0) {
-                const newY = attendee.position.y + dy;
-                const canMove = isValidMove(attendee.id, { x: attendee.position.x, y: newY });
-                
-                if (canMove) {
-                  attendee.position.y = newY;
-                  continue;
-                }
-              }
-              
-              // If blocked, try random movement
-              const directions: Direction[] = ['up', 'down', 'left', 'right'];
-              directions.sort(() => Math.random() - 0.5);
-              
-              for (const dir of directions) {
-                const newPos = getNewPosition(attendee.position, dir);
-                if (isValidMove(attendee.id, newPos)) {
-                  attendee.position = newPos;
-                  break;
-                }
-              }
+          let updated = false;
+          const newAttendees = prevAttendees.map(attendee => {
+            if (attendee.id !== PLAYER_ID && !attendee.isSeated && attendee.nextMove && attendee.nextMove <= now) {
+              updated = true;
+              const updatedAttendee = { ...attendee, nextMove: now + MOVE_INTERVAL };
+              moveNPC(updatedAttendee);
+              return updatedAttendee;
             }
-          }
-          
-          // Update grid occupation
-          setGrid(prevGrid => {
-            const newGrid = prevGrid.map(row => 
-              row.map(cell => ({ ...cell, occupiedBy: undefined }))
-            );
-            
-            // Mark cells as occupied
-            for (const attendee of newAttendees) {
-              const { x, y } = attendee.position;
-              if (y >= 0 && y < GRID_ROWS && x >= 0 && x < GRID_COLS) {
-                newGrid[y][x].occupiedBy = attendee.id;
-              }
-            }
-            
-            return newGrid;
+            return attendee;
           });
           
-          // Check if all attendees are seated
-          const allSeated = newAttendees.every(a => a.isSeated);
-          if (allSeated) {
-            setGameOver(true);
-            toast("Everyone is seated! The presentation can begin!");
+          if (updated) {
+            // Update grid occupation
+            updateGridOccupation(newAttendees);
           }
           
-          return newAttendees;
+          return updated ? newAttendees : prevAttendees;
         });
         
-        if (!gameOver) {
-          animationFrameRef.current = requestAnimationFrame(moveNPCs);
+        // Check if all attendees are seated
+        const allSeated = attendees.every(a => a.isSeated);
+        if (allSeated) {
+          setGameOver(true);
+          toast("Everyone is seated! The presentation can begin!");
+          return;
         }
+        
+        timerRef.current = requestAnimationFrame(updateClock);
       };
       
-      // Schedule NPC movement
-      const timeoutId = setTimeout(() => {
-        animationFrameRef.current = requestAnimationFrame(moveNPCs);
-      }, 1000);
+      timerRef.current = requestAnimationFrame(updateClock);
       
       return () => {
-        clearTimeout(timeoutId);
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
+        if (timerRef.current) {
+          cancelAnimationFrame(timerRef.current);
         }
       };
     }
-  }, [gameStarted, gameOver]);
+  }, [gameStarted, gameOver, lastTick, attendees]);
+
+  // Update grid occupation based on attendee positions
+  const updateGridOccupation = (newAttendees: AttendeeType[]) => {
+    setGrid(prevGrid => {
+      const newGrid = prevGrid.map(row => 
+        row.map(cell => ({ ...cell, occupiedBy: undefined }))
+      );
+      
+      // Mark cells as occupied
+      for (const attendee of newAttendees) {
+        const { x, y } = attendee.position;
+        if (y >= 0 && y < GRID_ROWS && x >= 0 && x < GRID_COLS) {
+          newGrid[y][x].occupiedBy = attendee.id;
+        }
+      }
+      
+      return newGrid;
+    });
+  };
+
+  // Move an NPC attendee
+  const moveNPC = (attendee: AttendeeType) => {
+    if (!attendee || attendee.isSeated) return;
+    
+    if (attendee.targetSeat) {
+      // Determine if the attendee is at their target
+      const atTarget = 
+        attendee.position.x === attendee.targetSeat.x && 
+        attendee.position.y === attendee.targetSeat.y;
+      
+      if (atTarget) {
+        attendee.isSeated = true;
+        return;
+      }
+      
+      // Try to move towards target seat
+      const dx = Math.sign(attendee.targetSeat.x - attendee.position.x);
+      const dy = Math.sign(attendee.targetSeat.y - attendee.position.y);
+      
+      // First try to move horizontally
+      if (dx !== 0) {
+        const newX = attendee.position.x + dx;
+        const canMove = isValidMove(attendee.id, { x: newX, y: attendee.position.y });
+        
+        if (canMove) {
+          attendee.position.x = newX;
+          return;
+        }
+      }
+      
+      // Then try to move vertically
+      if (dy !== 0) {
+        const newY = attendee.position.y + dy;
+        const canMove = isValidMove(attendee.id, { x: attendee.position.x, y: newY });
+        
+        if (canMove) {
+          attendee.position.y = newY;
+          return;
+        }
+      }
+      
+      // If blocked, try random movement
+      const directions: Direction[] = ['up', 'down', 'left', 'right'];
+      directions.sort(() => Math.random() - 0.5);
+      
+      for (const dir of directions) {
+        const newPos = getNewPosition(attendee.position, dir);
+        if (isValidMove(attendee.id, newPos)) {
+          attendee.position = newPos;
+          break;
+        }
+      }
+    }
+  };
 
   // Utility function to check if a move is valid
   const isValidMove = (attendeeId: number, position: Position): boolean => {
@@ -435,11 +470,18 @@ const ConferenceRoom: React.FC = () => {
   useEffect(() => {
     initializeGame();
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (timerRef.current) {
+        cancelAnimationFrame(timerRef.current);
       }
     };
   }, [initializeGame]);
+
+  // Format time as MM:SS
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="flex flex-col items-center justify-center p-4 gap-4">
@@ -451,11 +493,11 @@ const ConferenceRoom: React.FC = () => {
         
         <div className="flex justify-center space-x-4 mb-4">
           <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
+            <div className="w-4 h-4 rounded-full bg-green-500 mr-2"></div>
             <span>You</span>
           </div>
           <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full bg-red-400 mr-2"></div>
+            <div className="w-4 h-4 rounded-full bg-yellow-400 mr-2"></div>
             <span>Other Attendees</span>
           </div>
           <div className="flex items-center">
@@ -466,22 +508,34 @@ const ConferenceRoom: React.FC = () => {
       </div>
       
       <div className="bg-white rounded-xl shadow-md p-4 mb-4">
-        <div className="text-center mb-4">
-          {gameOver ? (
-            <p className="text-xl font-semibold text-green-600">
-              Everyone is seated! Presentation starting.
-            </p>
-          ) : playerSeated ? (
-            <p className="text-xl font-semibold text-blue-600">
-              You found a seat! Waiting for others...
-            </p>
-          ) : (
+        <div className="text-center mb-4 flex justify-between items-center px-4">
+          <div>
             <p className="text-lg">
-              Moves: <span className="font-bold">{movesCount}</span> | 
+              Moves: <span className="font-bold">{movesCount}</span>
+            </p>
+          </div>
+          
+          <div className="flex items-center">
+            <Clock className="mr-2 h-5 w-5 text-gray-500" />
+            <p className="text-lg font-mono">{formatTime(elapsedTime)}</p>
+          </div>
+          
+          <div>
+            <p className="text-lg">
               Seated: <span className="font-bold">{attendees.filter(a => a.isSeated).length}</span> of {TOTAL_ATTENDEES}
             </p>
-          )}
+          </div>
         </div>
+        
+        {gameOver ? (
+          <p className="text-xl font-semibold text-green-600 text-center mb-4">
+            Everyone is seated! Presentation starting.
+          </p>
+        ) : playerSeated ? (
+          <p className="text-xl font-semibold text-blue-600 text-center mb-4">
+            You found a seat! Waiting for others...
+          </p>
+        ) : null}
         
         {renderGrid()}
         
@@ -536,7 +590,8 @@ const ConferenceRoom: React.FC = () => {
       <div className="bg-white rounded-lg p-4 shadow-md w-full max-w-md">
         <h2 className="text-xl font-bold mb-2">How to Play:</h2>
         <ul className="list-disc pl-5 space-y-1">
-          <li>Use arrow keys or buttons to move your character (blue circle)</li>
+          <li>Use arrow keys or buttons to move your character (green circle)</li>
+          <li>Everyone moves one step per second - you can move anytime</li>
           <li>Navigate through the crowd to find an empty chair</li>
           <li>Once seated, wait for everyone else to find seats</li>
           <li>The game ends when all 48 attendees are seated</li>
