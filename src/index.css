@@ -149,3 +149,7 @@
 .podium {
   @apply bg-stone-700;
 }
+
+.sign {
+  @apply bg-purple-700 rounded-md p-1 flex items-center justify-center w-full h-full;
+}

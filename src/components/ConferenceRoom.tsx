@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from "sonner";
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
@@ -15,12 +16,13 @@ type AttendeeType = {
   targetSeat?: Position;
   nextMove?: number; // Timestamp for next move
 };
-type CellType = 'empty' | 'chair' | 'wall' | 'hallway' | 'aisle' | 'carpet' | 'podium' | 'row-aisle';
+type CellType = 'empty' | 'chair' | 'wall' | 'hallway' | 'aisle' | 'carpet' | 'podium' | 'row-aisle' | 'sign';
 type GridCell = {
   type: CellType;
   occupiedBy?: number; // ID of attendee occupying the cell
   isChair?: boolean;
   chairId?: number;
+  text?: string; // For the sign text
 };
 
 const GRID_ROWS = 15; // Adjusted for compact layout
@@ -92,6 +94,10 @@ const ConferenceRoom: React.FC = () => {
       }
     }
 
+    // Add sign on the podium
+    newGrid[GRID_ROWS - 2][aisleCol].type = 'sign';
+    newGrid[GRID_ROWS - 2][aisleCol].text = 'Velkommen til Forse fagdag';
+
     // Chair configuration parameters
     const firstChairRow = 5; // First row of chairs starts at this y-position
     const chairRowSpacing = 2; // One row of space between chair rows
@@ -113,7 +119,7 @@ const ConferenceRoom: React.FC = () => {
       
       // Left side chairs (24 chairs, 8 per row)
       for (let i = 0; i < CHAIRS_PER_ROW; i++) {
-        const chairCol = 1 + i; // No space between chairs horizontally
+        const chairCol = aisleCol - 1 - CHAIRS_PER_ROW + i; // Position chairs directly next to center aisle
         newGrid[chairRowY][chairCol].type = 'chair';
         newGrid[chairRowY][chairCol].isChair = true;
         newGrid[chairRowY][chairCol].chairId = chairPositions.length;
@@ -130,9 +136,9 @@ const ConferenceRoom: React.FC = () => {
       }
     }
 
-    // Initialize attendees in a two-abreast line in the hallway
+    // Initialize attendees at the top of the screen in the hallway
     const hallwayStartX = 2;
-    const hallwayStartY = 2;
+    const hallwayStartY = 1; // Start at the top of the hallway
     const newAttendees: AttendeeType[] = [];
     
     // Position calculation for two-abreast line
@@ -448,6 +454,13 @@ const ConferenceRoom: React.FC = () => {
               className={`grid-cell ${cell.type}`}
               style={{ width: CELL_SIZE, height: CELL_SIZE }}
             >
+              {cell.type === 'sign' && (
+                <div className="sign">
+                  <span className="text-white text-xs font-bold px-1">
+                    {cell.text}
+                  </span>
+                </div>
+              )}
               {cell.occupiedBy !== undefined && (
                 <div 
                   className={`

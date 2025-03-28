@@ -35,6 +35,17 @@ const Index = () => {
         .podium {
           background-color: #78350f;
         }
+        .sign {
+          background-color: #7E69AB;
+          color: white;
+          font-weight: bold;
+          text-align: center;
+          font-size: 10px;
+          padding: 2px;
+          border-radius: 3px;
+          border: 1px solid #D6BCFA;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
         .avatar-player, .avatar-npc {
           border-radius: 50%;
           margin: auto;
