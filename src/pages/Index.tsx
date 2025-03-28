@@ -1,10 +1,12 @@
 
+import React from 'react';
 import ConferenceRoom from '../components/ConferenceRoom';
 
 const Index = () => {
   return (
     <div className="min-h-screen bg-gray-100 py-8">
-      <style jsx global>{`
+      <style>
+        {`
         .grid-cell {
           border: 1px solid #ccc;
         }
@@ -53,7 +55,8 @@ const Index = () => {
             transform: translateY(-5px);
           }
         }
-      `}</style>
+        `}
+      </style>
       <ConferenceRoom />
     </div>
   );

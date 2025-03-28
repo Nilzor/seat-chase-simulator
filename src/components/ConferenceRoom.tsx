@@ -23,7 +23,7 @@ type GridCell = {
   chairId?: number;
 };
 
-const GRID_ROWS = 20; // Increased to accommodate row aisles
+const GRID_ROWS = 15; // Adjusted for compact layout
 const GRID_COLS = 30;
 const TOTAL_ATTENDEES = 48;
 const PLAYER_ID = 0;
@@ -64,14 +64,14 @@ const ConferenceRoom: React.FC = () => {
     }
 
     // Create hallway
-    for (let row = 1; row < 5; row++) {
+    for (let row = 1; row < 4; row++) {
       for (let col = 1; col < GRID_COLS - 1; col++) {
         newGrid[row][col].type = 'hallway';
       }
     }
 
     // Create carpet area
-    for (let row = 5; row < GRID_ROWS - 1; row++) {
+    for (let row = 4; row < GRID_ROWS - 1; row++) {
       for (let col = 1; col < GRID_COLS - 1; col++) {
         newGrid[row][col].type = 'carpet';
       }
@@ -79,7 +79,7 @@ const ConferenceRoom: React.FC = () => {
 
     // Create center aisle
     const aisleCol = Math.floor(GRID_COLS / 2);
-    for (let row = 5; row < GRID_ROWS - 1; row++) {
+    for (let row = 4; row < GRID_ROWS - 1; row++) {
       for (let col = aisleCol - 1; col <= aisleCol + 1; col++) {
         newGrid[row][col].type = 'aisle';
       }
@@ -92,58 +92,43 @@ const ConferenceRoom: React.FC = () => {
       }
     }
 
-    // Create row aisles between chair rows
-    const createRowAisle = (rowStart: number) => {
-      for (let col = 1; col < GRID_COLS - 1; col++) {
-        if (col !== aisleCol - 1 && col !== aisleCol && col !== aisleCol + 1) { // Skip center aisle cells
-          newGrid[rowStart][col].type = 'row-aisle';
-        }
-      }
-    };
-
-    // First chair row starts at row 7
-    const firstChairRow = 7;
-    const chairRowSpacing = 3; // Each chair row + aisle
-
-    // Create seats on both sides with row aisles between them
-    const chairPositions: Position[] = [];
-    const leftSide = aisleCol - 2;
-    const rightSide = aisleCol + 2;
+    // Chair configuration parameters
+    const firstChairRow = 5; // First row of chairs starts at this y-position
+    const chairRowSpacing = 2; // One row of space between chair rows
     
-    // Create chair rows and aisles between rows
+    // Create chair rows and row aisles
+    const chairPositions: Position[] = [];
+    
     for (let rowIdx = 0; rowIdx < CHAIR_ROWS; rowIdx++) {
       const chairRowY = firstChairRow + (rowIdx * chairRowSpacing);
       
-      // Create row aisles before each chair row (except the first one)
-      if (rowIdx > 0) {
-        createRowAisle(chairRowY - 1);
-      }
-      
-      // Left side chairs for this row
-      for (let i = 0; i < CHAIRS_PER_ROW / 2; i++) {
-        const chairCol = 2 + (i * 2); // Space chairs out
-        if (chairCol < leftSide) {
-          newGrid[chairRowY][chairCol].type = 'chair';
-          newGrid[chairRowY][chairCol].isChair = true;
-          newGrid[chairRowY][chairCol].chairId = chairPositions.length;
-          chairPositions.push({ x: chairCol, y: chairRowY });
+      // Create row aisle after each chair row (except the last one)
+      if (rowIdx < CHAIR_ROWS - 1) {
+        for (let col = 1; col < GRID_COLS - 1; col++) {
+          if (col < aisleCol - 1 || col > aisleCol + 1) { // Skip center aisle cells
+            newGrid[chairRowY + 1][col].type = 'row-aisle';
+          }
         }
       }
       
-      // Right side chairs for this row
-      for (let i = 0; i < CHAIRS_PER_ROW / 2; i++) {
-        const chairCol = rightSide + (i * 2); // Space chairs out
-        if (chairCol < GRID_COLS - 1) {
-          newGrid[chairRowY][chairCol].type = 'chair';
-          newGrid[chairRowY][chairCol].isChair = true;
-          newGrid[chairRowY][chairCol].chairId = chairPositions.length;
-          chairPositions.push({ x: chairCol, y: chairRowY });
-        }
+      // Left side chairs (24 chairs, 8 per row)
+      for (let i = 0; i < CHAIRS_PER_ROW; i++) {
+        const chairCol = 1 + i; // No space between chairs horizontally
+        newGrid[chairRowY][chairCol].type = 'chair';
+        newGrid[chairRowY][chairCol].isChair = true;
+        newGrid[chairRowY][chairCol].chairId = chairPositions.length;
+        chairPositions.push({ x: chairCol, y: chairRowY });
+      }
+      
+      // Right side chairs (24 chairs, 8 per row)
+      for (let i = 0; i < CHAIRS_PER_ROW; i++) {
+        const chairCol = aisleCol + 2 + i; // Start right after center aisle
+        newGrid[chairRowY][chairCol].type = 'chair';
+        newGrid[chairRowY][chairCol].isChair = true;
+        newGrid[chairRowY][chairCol].chairId = chairPositions.length;
+        chairPositions.push({ x: chairCol, y: chairRowY });
       }
     }
-
-    // Create row aisle after the last chair row
-    createRowAisle(firstChairRow + (CHAIR_ROWS * chairRowSpacing) - 1);
 
     // Initialize attendees in a two-abreast line in the hallway
     const hallwayStartX = 2;
