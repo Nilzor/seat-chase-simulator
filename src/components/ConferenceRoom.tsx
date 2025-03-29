@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from "sonner";
 import { useKeyboardControls } from '../hooks/useKeyboardControls';
 import { Button } from '../components/ui/button';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Clock } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Clock, Trophy } from 'lucide-react';
 
 // Define types
 type Position = { x: number; y: number };
@@ -23,6 +23,7 @@ type GridCell = {
   isChair?: boolean;
   chairId?: number;
   text?: string; // For the sign text
+  score?: number; // Score value for this cell if it's a chair
 };
 
 const GRID_ROWS = 15; // Adjusted for compact layout
@@ -43,10 +44,20 @@ const ConferenceRoom: React.FC = () => {
   const [movesCount, setMovesCount] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [lastTick, setLastTick] = useState(0);
+  const [playerScore, setPlayerScore] = useState<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>();
   const timerRef = useRef<number>();
   
+  // Calculate score for a chair based on distance from stage
+  const calculateChairScore = (row: number): number => {
+    // Closer to stage = higher score (max 500, min 100)
+    const maxScore = 500;
+    const minScore = 100;
+    const normalizedRow = (GRID_ROWS - row) / GRID_ROWS; // Higher for rows closer to stage
+    return Math.round(minScore + normalizedRow * (maxScore - minScore));
+  };
+
   // Initialize the grid and attendees
   const initializeGame = useCallback(() => {
     // Create an empty grid
@@ -123,6 +134,8 @@ const ConferenceRoom: React.FC = () => {
         newGrid[chairRowY][chairCol].type = 'chair';
         newGrid[chairRowY][chairCol].isChair = true;
         newGrid[chairRowY][chairCol].chairId = chairPositions.length;
+        // Calculate score based on proximity to stage
+        newGrid[chairRowY][chairCol].score = calculateChairScore(chairRowY);
         chairPositions.push({ x: chairCol, y: chairRowY });
       }
       
@@ -132,6 +145,8 @@ const ConferenceRoom: React.FC = () => {
         newGrid[chairRowY][chairCol].type = 'chair';
         newGrid[chairRowY][chairCol].isChair = true;
         newGrid[chairRowY][chairCol].chairId = chairPositions.length;
+        // Calculate score based on proximity to stage
+        newGrid[chairRowY][chairCol].score = calculateChairScore(chairRowY);
         chairPositions.push({ x: chairCol, y: chairRowY });
       }
     }
@@ -151,6 +166,13 @@ const ConferenceRoom: React.FC = () => {
       };
     };
 
+    // Shuffle chair positions for random seat selection
+    const shuffledChairPositions = [...chairPositions];
+    for (let i = shuffledChairPositions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledChairPositions[i], shuffledChairPositions[j]] = [shuffledChairPositions[j], shuffledChairPositions[i]];
+    }
+
     // Create all non-player attendees
     for (let i = 0; i < TOTAL_ATTENDEES; i++) {
       if (i !== PLAYER_ID) {
@@ -160,7 +182,8 @@ const ConferenceRoom: React.FC = () => {
           position,
           color: 'bg-yellow-400', // All other attendees are yellow
           isSeated: false,
-          targetSeat: { ...chairPositions[i % chairPositions.length] },
+          // Assign random seat from shuffled list
+          targetSeat: { ...shuffledChairPositions[i % shuffledChairPositions.length] },
           nextMove: Date.now() + MOVE_INTERVAL
         };
         newAttendees.push(attendee);
@@ -196,6 +219,7 @@ const ConferenceRoom: React.FC = () => {
     setMovesCount(0);
     setElapsedTime(0);
     setLastTick(Date.now());
+    setPlayerScore(null);
   }, []);
 
   // Main game loop
@@ -290,25 +314,53 @@ const ConferenceRoom: React.FC = () => {
       const dx = Math.sign(attendee.targetSeat.x - attendee.position.x);
       const dy = Math.sign(attendee.targetSeat.y - attendee.position.y);
       
-      // First try to move horizontally
-      if (dx !== 0) {
-        const newX = attendee.position.x + dx;
-        const canMove = isValidMove(attendee.id, { x: newX, y: attendee.position.y });
-        
-        if (canMove) {
-          attendee.position.x = newX;
-          return;
-        }
-      }
+      // Randomly decide whether to move horizontally or vertically first
+      // to add some randomness to movement patterns
+      const moveHorizontalFirst = Math.random() > 0.5;
       
-      // Then try to move vertically
-      if (dy !== 0) {
-        const newY = attendee.position.y + dy;
-        const canMove = isValidMove(attendee.id, { x: attendee.position.x, y: newY });
+      if (moveHorizontalFirst) {
+        // Try horizontal move first
+        if (dx !== 0) {
+          const newX = attendee.position.x + dx;
+          const canMove = isValidMove(attendee.id, { x: newX, y: attendee.position.y });
+          
+          if (canMove) {
+            attendee.position.x = newX;
+            return;
+          }
+        }
         
-        if (canMove) {
-          attendee.position.y = newY;
-          return;
+        // Then try vertical move
+        if (dy !== 0) {
+          const newY = attendee.position.y + dy;
+          const canMove = isValidMove(attendee.id, { x: attendee.position.x, y: newY });
+          
+          if (canMove) {
+            attendee.position.y = newY;
+            return;
+          }
+        }
+      } else {
+        // Try vertical move first
+        if (dy !== 0) {
+          const newY = attendee.position.y + dy;
+          const canMove = isValidMove(attendee.id, { x: attendee.position.x, y: newY });
+          
+          if (canMove) {
+            attendee.position.y = newY;
+            return;
+          }
+        }
+        
+        // Then try horizontal move
+        if (dx !== 0) {
+          const newX = attendee.position.x + dx;
+          const canMove = isValidMove(attendee.id, { x: newX, y: attendee.position.y });
+          
+          if (canMove) {
+            attendee.position.x = newX;
+            return;
+          }
         }
       }
       
@@ -411,7 +463,11 @@ const ConferenceRoom: React.FC = () => {
           if (newGrid[newPosition.y][newPosition.x].type === 'chair') {
             player.isSeated = true;
             setPlayerSeated(true);
-            toast("You found a seat! Now wait for others to be seated.");
+            
+            // Calculate and show score
+            const chairScore = newGrid[newPosition.y][newPosition.x].score || 0;
+            setPlayerScore(chairScore);
+            toast.success(`You found a seat! Your score: ${chairScore} points!`);
           }
           
           return newGrid;
@@ -550,9 +606,17 @@ const ConferenceRoom: React.FC = () => {
             Everyone is seated! Presentation starting.
           </p>
         ) : playerSeated ? (
-          <p className="text-xl font-semibold text-blue-600 text-center mb-4">
-            You found a seat! Waiting for others...
-          </p>
+          <div className="flex flex-col items-center mb-4">
+            <p className="text-xl font-semibold text-blue-600 text-center">
+              You found a seat! Waiting for others...
+            </p>
+            {playerScore !== null && (
+              <div className="flex items-center mt-2 bg-yellow-100 p-2 rounded-md">
+                <Trophy className="h-5 w-5 text-yellow-600 mr-2" />
+                <span className="font-bold text-yellow-900">Score: {playerScore} points</span>
+              </div>
+            )}
+          </div>
         ) : null}
         
         {renderGrid()}
@@ -614,6 +678,7 @@ const ConferenceRoom: React.FC = () => {
           <li>Once seated, you can't stand up again</li>
           <li>All attendees have numbers to identify them</li>
           <li>The game ends when all 48 attendees are seated</li>
+          <li>Seats closer to the stage are worth more points!</li>
         </ul>
       </div>
     </div>
